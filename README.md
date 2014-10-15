@@ -9,7 +9,7 @@ upgrades the project from laravel 4.1 to 4.2 - bash
 
 you can either run like this: 
 
-    *bash lupgrader* 
+    bash lupgrader
 
 or: 
 
