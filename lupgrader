@@ -1,0 +1,81 @@
+#!/bin/bash
+
+MODELS_FOLDER="app/models"
+USER_MODEL_NAME="User.php"
+USER_MODEL_PATH="$MODELS_FOLDER/$USER_MODEL_NAME"
+
+GRT=1
+SRT=1
+GRTN=1
+
+if [ ! -f "$USER_MODEL_PATH" ]; then
+	echo "* $USER_MODEL_PATH not found. "
+	echo "* Program terminated. "
+	exit 1
+fi
+
+grep -w 'getRememberToken' "$USER_MODEL_PATH" &>/dev/null
+if [ $? == 0 ]; then
+	echo "* getRememberToken() exists. "
+	GRT=0
+fi
+
+grep -w 'setRememberToken' "$USER_MODEL_PATH" &>/dev/null
+if [ $? == 0 ]; then
+	echo "* setRememberToken() exists. "
+	SRT=0
+fi
+
+grep -w 'getRememberTokenName' "$USER_MODEL_PATH" &>/dev/null
+if [ $? == 0 ]; then
+	echo "* getRememberTokenName() exists. "
+	GRTN=0
+fi
+
+# echo "$GRT - $SRT - $GRTN" # debug
+
+[ $GRT -eq 1 ] && UPSTR=$UPSTR'public function getRememberToken(){return $this->remember_token;}'
+[ $SRT -eq 1 ] && UPSTR=$UPSTR'public function setRememberToken($value){$this->remember_token = $value;}'
+[ $GRTN -eq 1 ] && UPSTR=$UPSTR'public function getRememberTokenName(){return 'remember_token';}'
+
+if [ $GRT -eq 1 ] || [ $SRT -eq 1 ] || [ $GRTN -eq 1 ]; then
+	echo "* User model updated. "
+	cat <<-EOF >> "$USER_MODEL_PATH"
+	$UPSTR
+	EOF
+else
+	echo "* User model is already updated. "
+fi
+
+# I thought about asking users for database dump, but I guess it's better not to
+
+echo -ne "\n***Database Info***\nusername: (press ENTER for root@localhost)\n> "
+read DB_USER
+
+[ -z $DB_USER] && DB_USER="root"
+
+# a loop would be better here probably for tablename check
+
+echo -ne "database name: \n> "
+read DB_NAME
+
+echo -ne "name of your 'users' table: (press ENTER for 'users')\n> "
+read TBL_NAME
+
+[ -z $TBL_NAME ] && TBL_NAME='users'
+
+COL_NAMES=$(mysql -u $DB_USER -p -sN -e "select column_name from information_schema.columns where table_schema='$DB_NAME' and table_name='$TBL_NAME';")
+
+# echo -e "List of columns before update: \n$COL_NAMES"
+
+grep 'remember_token' <<< $COL_NAMES
+if [ $? == 0 ]; then
+	echo "* Database left untouched. Already updated. "
+else
+	echo -ne "\n***MySQL Dump for $DB_NAME***\n"
+	# mysqldump -u $DB_USER -p $DB_NAME > $DB_NAME.dump.$(date +"%y-%m-%d-%T").sql
+	mysqldump -u $DB_USER -p $DB_NAME > $DB_NAME.dump.$(date +"%F-%T").sql
+
+	echo -ne "\n***MySQL Schema Update for $DB_NAME***\n"
+	mysql -u root -p -e "alter table users add column remember_token varchar(100) null after id;" $DB_NAME
+fi
